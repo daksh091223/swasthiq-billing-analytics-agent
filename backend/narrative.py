@@ -1,6 +1,5 @@
 import os
 import re
-from typing import Literal
 
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -155,8 +154,11 @@ def validate_narrative(narrative: NarrativeResponse, report: dict):
             unknown = token_ids - allowed
             raise ValueError(f"Unknown figure token(s): {', '.join(sorted(unknown))}")
 
-        if not token_ids.issubset(set(section.figure_ids)):
-            raise ValueError("Every figure token must be listed in figure_ids")
+        # The token in the narrative text is the authoritative signal that a
+        # figure was used. Some models omit the redundant figure_ids metadata,
+        # so normalize it server-side rather than rejecting an otherwise
+        # grounded narrative. Unknown tokens are still rejected above.
+        section.figure_ids = list(dict.fromkeys(section.figure_ids + sorted(token_ids)))
 
         for figure_id in section.figure_ids:
             if figure_id not in allowed:
