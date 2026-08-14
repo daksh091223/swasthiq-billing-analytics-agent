@@ -1,7 +1,9 @@
 from billing_engine import build_eod_report
 
+
 def make_record(
     visit_id="V1",
+    clinic_id="C1",
     payment_mode="cash",
     amount=100,
     discount=0,
@@ -9,7 +11,7 @@ def make_record(
     hour=13,
 ):
     return {
-        "clinic_id": "C1",
+        "clinic_id": clinic_id,
         "visit_id": visit_id,
         "timestamp": f"2026-07-27T{hour:02d}:20:00Z",
         "doctor_id": "D1",
@@ -205,3 +207,28 @@ def test_reconciliation_invariant():
     )
 
     assert hourly_total == totals["billed_paise"]
+
+
+def test_duplicate_visit_id_is_rejected():
+    report = build_eod_report([
+        make_record(visit_id="V1", amount=100),
+        make_record(visit_id="V1", amount=200),
+    ])
+
+    assert report["status"] == "partial"
+    assert report["processed_rows"] == 1
+    assert report["rejected_rows"][0]["field"] == "visit_id"
+    assert report["rejected_rows"][0]["code"] == "INVALID_BILLING_ROW"
+    assert report["totals"]["billed_paise"] == 100
+
+
+def test_mixed_clinic_ids_are_rejected():
+    report = build_eod_report([
+        make_record(visit_id="V1", clinic_id="C1", amount=100),
+        make_record(visit_id="V2", clinic_id="C2", amount=200),
+    ])
+
+    assert report["status"] == "partial"
+    assert report["processed_rows"] == 1
+    assert report["rejected_rows"][0]["field"] == "clinic_id"
+    assert report["totals"]["billed_paise"] == 100
