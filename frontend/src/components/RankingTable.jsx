@@ -10,7 +10,7 @@ export default function RankingTable({ title, rows, valueLabel, formatValue }) {
         <div className="empty-state">No medicine data.</div>
       ) : (
         <div className="ranking-list">
-          {rows.slice(0, 8).map((row, index) => (
+          {rows.slice(0, 5).map((row, index) => (
             <div className="ranking-row" key={row.drug_name}>
               <span className="rank">{index + 1}</span>
               <span className="medicine-name">{row.drug_name}</span>
