@@ -65,9 +65,9 @@ def test_untraced_number_is_rejected():
         validate_narrative(narrative, report())
 
 
-def test_missing_figure_trace_is_rejected():
+def test_missing_figure_trace_is_normalized_server_side():
     narrative = NarrativeResponse(
-        title="Bad",
+        title="Summary",
         sections=[
             NarrativeSection(
                 heading="Summary",
@@ -77,8 +77,9 @@ def test_missing_figure_trace_is_rejected():
         ],
     )
 
-    with pytest.raises(ValueError):
-        validate_narrative(narrative, report())
+    validate_narrative(narrative, report())
+
+    assert narrative.sections[0].figure_ids == ["total_billed"]
 
 
 def test_trace_figures_points_to_deterministic_fields():
