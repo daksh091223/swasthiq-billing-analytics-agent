@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Sidebar from "./components/Sidebar";
 import MetricCard from "./components/MetricCard";
 import BarChart from "./components/BarChart";
@@ -13,12 +13,12 @@ const DEMO_ROWS = [
     doctor_id: "D1",
     line_items: [
       { drug_name: "OMEPRAZOLE", qty: 2, unit_price_paise: 4000 },
-      { drug_name: "PARACETAMOL", qty: 2, unit_price_paise: 1000 }
+      { drug_name: "PARACETAMOL", qty: 2, unit_price_paise: 1000 },
     ],
     payment_mode: "upi",
     amount_paid_paise: 10000,
     discount_paise: 0,
-    is_refund: false
+    is_refund: false,
   },
   {
     clinic_id: "C1",
@@ -26,13 +26,13 @@ const DEMO_ROWS = [
     timestamp: "2026-07-27T16:20:00Z",
     doctor_id: "D2",
     line_items: [
-      { drug_name: "METFORMIN", qty: 2, unit_price_paise: 3000 }
+      { drug_name: "METFORMIN", qty: 2, unit_price_paise: 3000 },
     ],
     payment_mode: "cash",
     amount_paid_paise: 5000,
     discount_paise: 1000,
-    is_refund: false
-  }
+    is_refund: false,
+  },
 ];
 
 function money(paise) {
@@ -90,6 +90,7 @@ export default function App() {
 
       const result = await analyzeBilling(rows);
       setReport(result);
+      setNarrative(null);
       setSource("Live API");
     } catch (err) {
       setError(err.message || "Unable to analyze data.");
@@ -171,14 +172,7 @@ export default function App() {
   );
 }
 
-function Dashboard({
-  report,
-  rowsText,
-  setRowsText,
-  runAnalysis,
-  loadDemo,
-  loading,
-}) {
+function Dashboard({ report, rowsText, setRowsText, runAnalysis, loadDemo, loading }) {
   const totals = report.totals;
 
   return (
@@ -206,11 +200,7 @@ function Dashboard({
             </button>
           </div>
 
-          <textarea
-            value={rowsText}
-            onChange={(e) => setRowsText(e.target.value)}
-            spellCheck="false"
-          />
+          <textarea value={rowsText} onChange={(e) => setRowsText(e.target.value)} spellCheck="false" />
 
           <button className="primary-button" onClick={runAnalysis} disabled={loading}>
             {loading ? "Analyzing..." : "Run EOD analysis"}
@@ -284,20 +274,6 @@ function Dashboard({
 function Analytics({ report }) {
   return (
     <>
-      <section className="metric-grid analytics-metrics">
-        <MetricCard
-          label="Peak Hour"
-          value={
-            report.analytics.peak_hour === null
-              ? "—"
-              : `${String(report.analytics.peak_hour).padStart(2, "0")}:00`
-          }
-        />
-        <MetricCard label="Processed Rows" value={report.processed_rows} />
-        <MetricCard label="Rejected Rows" value={report.rejected_rows.length} />
-        <MetricCard label="Revenue Events" value={report.analytics.revenue_by_hour.length} />
-      </section>
-
       <section className="panel chart-panel">
         <div className="panel-header">
           <div>
@@ -333,13 +309,44 @@ function Analytics({ report }) {
 }
 
 function Narrative({ report, narrative, loading, onGenerate }) {
+  const fallbackTraces = [
+    ["Total billed", "totals.billed_paise", money(report.totals.billed_paise)],
+    ["Total collected", "totals.collected_paise", money(report.totals.collected_paise)],
+    ["Outstanding", "totals.outstanding_paise", money(report.totals.outstanding_paise)],
+    ["Refunds", "totals.refunds_paise", money(report.totals.refunds_paise)],
+    [
+      "Peak hour",
+      "analytics.peak_hour",
+      report.analytics.peak_hour === null
+        ? "—"
+        : `${String(report.analytics.peak_hour).padStart(2, "0")}:00 UTC`,
+    ],
+  ];
+
+  const topQuantity = report.analytics.top_medicines_by_quantity[0];
+  const topRevenue = report.analytics.top_medicines_by_revenue[0];
+
+  if (topQuantity) {
+    fallbackTraces.push([
+      "Top medicine by quantity",
+      "analytics.top_medicines_by_quantity[0]",
+      `${topQuantity.drug_name} (${topQuantity.quantity} units)`,
+    ]);
+  }
+
+  if (topRevenue) {
+    fallbackTraces.push([
+      "Top medicine by revenue",
+      "analytics.top_medicines_by_revenue[0]",
+      `${topRevenue.drug_name} (${money(topRevenue.revenue_paise)})`,
+    ]);
+  }
+
   return (
     <section className="narrative-layout">
       <div className="panel narrative-card">
         <span className="eyebrow">AI-generated layer</span>
-        <h2>
-          {narrative?.title || "Turn the verified EOD report into a concise operator summary."}
-        </h2>
+        <h2>{narrative?.title || "Turn the verified EOD report into a concise operator summary."}</h2>
 
         {!narrative ? (
           <>
@@ -354,14 +361,12 @@ function Narrative({ report, narrative, loading, onGenerate }) {
             </button>
           </>
         ) : (
-          <>
-            {narrative.sections.map((section) => (
-              <div className="narrative-section" key={section.heading}>
-                <h3>{section.heading}</h3>
-                <p>{section.text}</p>
-              </div>
-            ))}
-          </>
+          narrative.sections.map((section) => (
+            <div className="narrative-section" key={section.heading}>
+              <h3>{section.heading}</h3>
+              <p>{section.text}</p>
+            </div>
+          ))
         )}
 
         {narrative && (
@@ -377,30 +382,15 @@ function Narrative({ report, narrative, loading, onGenerate }) {
           <div>
             <h3>Traced Figures</h3>
             <span>
-              {narrative
-                ? "Figures used by the generated narrative"
-                : "Deterministic source fields"}
+              {narrative ? "Figures used by the generated narrative" : "Deterministic source fields"}
             </span>
           </div>
           <span className="verified-badge">Verified source</span>
         </div>
 
         <div className="trace-list">
-          {(narrative?.traced_figures || [
-            ["Total billed", "totals.billed_paise", money(report.totals.billed_paise)],
-            ["Total collected", "totals.collected_paise", money(report.totals.collected_paise)],
-            ["Outstanding", "totals.outstanding_paise", money(report.totals.outstanding_paise)],
-            ["Refunds", "totals.refunds_paise", money(report.totals.refunds_paise)],
-            [
-              "Peak hour",
-              "analytics.peak_hour",
-              report.analytics.peak_hour === null
-                ? "—"
-                : `${String(report.analytics.peak_hour).padStart(2, "0")}:00 UTC`,
-            ],
-          ]).map((item) => {
+          {(narrative?.traced_figures || fallbackTraces).map((item) => {
             const isTrace = !Array.isArray(item);
-
             const id = isTrace ? item.id : item[1];
             const label = isTrace ? item.label : item[0];
             const source = isTrace ? item.source : item[1];
