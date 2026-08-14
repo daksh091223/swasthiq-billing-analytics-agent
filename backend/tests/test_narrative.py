@@ -1,4 +1,3 @@
-
 import pytest
 
 from narrative import NarrativeResponse, NarrativeSection, render_narrative, trace_figures, validate_narrative
@@ -18,8 +17,14 @@ def report():
         "analytics": {
             "peak_hour": 13,
             "revenue_by_hour": [],
-            "top_medicines_by_quantity": [],
-            "top_medicines_by_revenue": [],
+            "top_medicines_by_quantity": [
+                {"drug_name": "PARACETAMOL", "quantity": 142},
+                {"drug_name": "AMOXICILLIN", "quantity": 88},
+            ],
+            "top_medicines_by_revenue": [
+                {"drug_name": "ATORVASTATIN", "revenue_paise": 648000},
+                {"drug_name": "AMOXICILLIN", "revenue_paise": 594000},
+            ],
         },
     }
 
@@ -97,3 +102,40 @@ def test_trace_figures_points_to_deterministic_fields():
         "source": "totals.outstanding_paise",
         "value": "₹18.00",
     }]
+
+
+def test_medicine_figures_render_and_trace():
+    narrative = NarrativeResponse(
+        title="Summary",
+        sections=[
+            NarrativeSection(
+                heading="Medicine movers",
+                text="Top by quantity: {top_medicine_quantity}. Top by revenue: {top_medicine_revenue}.",
+                figure_ids=["top_medicine_quantity", "top_medicine_revenue"],
+            )
+        ],
+    )
+
+    validate_narrative(narrative, report())
+    rendered = render_narrative(narrative, report())
+    traces = trace_figures(rendered, report())
+
+    assert rendered.sections[0].text == (
+        "Top by quantity: PARACETAMOL (142 units). "
+        "Top by revenue: ATORVASTATIN (₹6,480.00)."
+    )
+
+    assert traces == [
+        {
+            "id": "top_medicine_quantity",
+            "label": "Top medicine by quantity",
+            "source": "analytics.top_medicines_by_quantity[0]",
+            "value": "PARACETAMOL (142 units)",
+        },
+        {
+            "id": "top_medicine_revenue",
+            "label": "Top medicine by revenue",
+            "source": "analytics.top_medicines_by_revenue[0]",
+            "value": "ATORVASTATIN (₹6,480.00)",
+        },
+    ]
