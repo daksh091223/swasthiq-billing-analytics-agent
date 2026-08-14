@@ -4,6 +4,8 @@ from pydantic import ValidationError
 from models import BillingRecord
 
 PAYMENT_MODES = ("cash", "card", "upi")
+
+
 def parse_timestamp(timestamp: str) -> datetime:
     value = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
 
@@ -15,11 +17,13 @@ def parse_timestamp(timestamp: str) -> datetime:
 
     return value
 
+
 def gross_value(record: BillingRecord) -> int:
     return sum(
         item.qty * item.unit_price_paise
         for item in record.line_items
     )
+
 
 def validate_business_rules(record: BillingRecord) -> None:
     gross = gross_value(record)
@@ -35,6 +39,7 @@ def validate_business_rules(record: BillingRecord) -> None:
 
     if not record.is_refund and record.amount_paid_paise > gross - record.discount_paise:
         raise ValueError("amount_paid_paise cannot exceed billed value")
+
 
 def validate_row(raw_row, row_number: int):
     if not isinstance(raw_row, dict):
@@ -73,6 +78,7 @@ def validate_row(raw_row, row_number: int):
             "message": str(error),
         }
 
+
 def build_eod_report(rows: list) -> dict:
     billed = defaultdict(int)
     collected = defaultdict(int)
@@ -84,6 +90,8 @@ def build_eod_report(rows: list) -> dict:
 
     rejected_rows = []
     processed_rows = 0
+    seen_visit_ids = set()
+    clinic_id = None
 
     for row_number, raw_row in enumerate(rows, start=1):
         record, error = validate_row(raw_row, row_number)
@@ -92,6 +100,29 @@ def build_eod_report(rows: list) -> dict:
             rejected_rows.append(error)
             continue
 
+        if clinic_id is None:
+            clinic_id = record.clinic_id
+        elif record.clinic_id != clinic_id:
+            rejected_rows.append({
+                "row_number": row_number,
+                "visit_id": record.visit_id,
+                "code": "INVALID_BILLING_ROW",
+                "field": "clinic_id",
+                "message": "All rows in a billing log must belong to the same clinic",
+            })
+            continue
+
+        if record.visit_id in seen_visit_ids:
+            rejected_rows.append({
+                "row_number": row_number,
+                "visit_id": record.visit_id,
+                "code": "INVALID_BILLING_ROW",
+                "field": "visit_id",
+                "message": "visit_id must be unique within the billing log",
+            })
+            continue
+
+        seen_visit_ids.add(record.visit_id)
         processed_rows += 1
 
         if record.is_refund:
