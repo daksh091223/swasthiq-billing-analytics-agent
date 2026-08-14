@@ -1,4 +1,3 @@
-
 import os
 import re
 from typing import Literal
@@ -44,6 +43,14 @@ FIGURES = {
         "label": "Peak hour",
         "path": "analytics.peak_hour",
     },
+    "top_medicine_quantity": {
+        "label": "Top medicine by quantity",
+        "path": "analytics.top_medicines_by_quantity[0]",
+    },
+    "top_medicine_revenue": {
+        "label": "Top medicine by revenue",
+        "path": "analytics.top_medicines_by_revenue[0]",
+    },
     "processed_rows": {
         "label": "Processed rows",
         "path": "processed_rows",
@@ -64,6 +71,8 @@ Rules:
 - Never calculate, modify, estimate, or invent financial numbers.
 - Never introduce a number that is not represented by a figure token.
 - When mentioning a report figure, use its exact token, such as {total_billed}.
+- For the top medicine by quantity, use {top_medicine_quantity}. The rendered value will include the medicine name and quantity.
+- For the top medicine by revenue, use {top_medicine_revenue}. The rendered value will include the medicine name and revenue.
 - You may make simple qualitative observations only when directly supported by the report.
 - Do not mention information outside the supplied report.
 - Do not mention raw billing rows.
@@ -74,7 +83,8 @@ Rules:
 - Every figure token used must appear in figure_ids for that section.
 - Available figure tokens:
   {total_billed}, {total_collected}, {outstanding}, {refunds},
-  {peak_hour}, {processed_rows}, {rejected_rows}.
+  {peak_hour}, {top_medicine_quantity}, {top_medicine_revenue},
+  {processed_rows}, {rejected_rows}.
 """
 
 
@@ -98,6 +108,14 @@ def _get_figure_value(report: dict, figure_id: str):
     if figure_id == "rejected_rows":
         return len(report["rejected_rows"])
 
+    if figure_id == "top_medicine_quantity":
+        medicines = report["analytics"]["top_medicines_by_quantity"]
+        return medicines[0] if medicines else None
+
+    if figure_id == "top_medicine_revenue":
+        medicines = report["analytics"]["top_medicines_by_revenue"]
+        return medicines[0] if medicines else None
+
     value = report
     for key in FIGURES[figure_id]["path"].split("."):
         value = value[key]
@@ -113,6 +131,16 @@ def _format_figure(report: dict, figure_id: str) -> str:
 
     if figure_id in {"processed_rows", "rejected_rows"}:
         return str(value)
+
+    if figure_id == "top_medicine_quantity":
+        if value is None:
+            return "—"
+        return f"{value['drug_name']} ({value['quantity']} units)"
+
+    if figure_id == "top_medicine_revenue":
+        if value is None:
+            return "—"
+        return f"{value['drug_name']} (₹{value['revenue_paise'] / 100:,.2f})"
 
     return f"₹{value / 100:,.2f}"
 
@@ -135,7 +163,7 @@ def validate_narrative(narrative: NarrativeResponse, report: dict):
                 raise ValueError(f"Unknown figure id: {figure_id}")
 
         # Numeric literals are not allowed in model-authored narrative text.
-        # This prevents the model from sneaking in an untraced number.
+        # This prevents the model from introducing an untraced number.
         if re.search(r"\b\d+(?:[.,]\d+)*\b", section.text):
             raise ValueError("Narrative contains an untraced numeric literal")
 
